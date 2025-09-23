@@ -1,46 +1,67 @@
 package com.example.demo.infrastructure.security.totp;
 
-import org.apache.commons.codec.binary.Base32;
-
-import java.security.SecureRandom;
+import java.util.Scanner;
+import java.util.concurrent.CompletableFuture;
 
 import static com.example.demo.infrastructure.security.totp.QRCodeGenerator.generateQRCode;
 
 public class Test {
 
+    // 記住 secret，後面驗證會用到
+    private static String secretGlobal;
+
     public static void main(String[] args) throws Exception {
-        // 你可以切換 testCase1 / testCase2 來試
-        testCase1();
-        // testCase2();
+        generateAndVerifyTotpFlow();
+
+        // 模擬使用者輸入一次性驗證碼
+        verifyWithUserInput();
     }
 
-    // 動態產生 secret，產 URL 與 QR，並本地驗證
-    private static void testCase1() throws Exception {
-        String secret = TOTP.generateSecretBase32(); // Base32（A–Z,2–7），不含 '='
-        System.out.println("Secret: " + secret);
+    /**
+     * 建立 TOTP Secret、生成 otpauth URL，
+     * 非同步產出 QR Code，並等待完成後再進行下一步
+     */
+    private static void generateAndVerifyTotpFlow() throws Exception {
+        secretGlobal = TOTP.generateSecretBase32(); // Base32（A–Z,2–7），不含 '='
+        System.out.println("Secret: " + secretGlobal);
 
         // 用 Builder 產生正確 otpauth URL
-        String url = QRCodeGenerator.buildTotpUrl("WaltorApp", "waltor.huang@gmail.com", secret);
+        String url = QRCodeGenerator.buildTotpUrl("WaltorApp", "waltor.huang@gmail.com", secretGlobal);
         System.out.println("Scan this QR with Google Authenticator: " + url);
 
-        // 產出 QR Code 圖檔（≥320 推薦）
-        generateQRCode(url, "qrcode.png", 320, 320);
-        System.out.println("QRCode 已產生在 qrcode.png");
+        // 非同步產生 QR Code 圖片
+        CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
+            try {
+                generateQRCode(url, "qrcode.png", 320, 320);
+                System.out.println("QRCode 已產生在 qrcode.png");
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
 
-        // 模擬驗證（本機 TOTP 與 verify）
-        String code = TOTP.generateTOTP(secret, System.currentTimeMillis() / 1000 / 30);
+        // 等待圖片產生完成再繼續
+        future.join();
+
+        // 本地模擬驗證
+        String code = TOTP.generateTOTP(secretGlobal, System.currentTimeMillis() / 1000 / 30);
         System.out.println("Current TOTP: " + code);
-        boolean ok = TOTP.verify(secret, code);
+        boolean ok = TOTP.verify(secretGlobal, code);
         System.out.println("Verify result: " + ok);
     }
 
-    // 使用固定 secret 測試：確認 GA 可掃（可換成你資料庫裡的 secret）
-    private static void testCase2() throws Exception {
-        String secret = "JBSWY3DPEHPK3PXP"; // Base32 範例
-        String url = QRCodeGenerator.buildTotpUrl("MyApp", "user@example.com", secret);
-        System.out.println("Scan this QR with Google Authenticator: " + url);
+    /**
+     * 從命令列讀取使用者輸入的 6 位數驗證碼並驗證
+     */
+    private static void verifyWithUserInput() throws Exception {
+        Scanner scanner = new Scanner(System.in);
+        System.out.print("請輸入 Google Authenticator 顯示的 6 位數驗證碼: ");
+        String userCode = scanner.nextLine().trim();
 
-        generateQRCode(url, "qrcode_static.png", 320, 320);
-        System.out.println("QRCode 已產生在 qrcode_static.png");
+        boolean result = TOTP.verify(secretGlobal, userCode);
+        if (result) {
+            System.out.println("✅ 驗證成功！");
+        } else {
+            System.out.println("❌ 驗證失敗，請確認輸入的代碼或時間是否同步。");
+        }
     }
 }
