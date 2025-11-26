@@ -4,6 +4,8 @@
 
 ## 資料夾結構
 
+```
+
 /
 ├── /application         # 用例層 (Application Service)
 │    ├── service         # 應用服務，協調 domain 物件完成用例
@@ -25,6 +27,7 @@
      ├── rest            # REST API Controller
      ├── grpc            # gRPC API
      └── scheduler       # Job, Event Listener, Consumer
+```
 
 ## 指令建立資料夾結構
 
